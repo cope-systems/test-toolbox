@@ -1,8 +1,11 @@
 from __future__ import print_function
 from functools import wraps, partial
+from collections import namedtuple
 import traceback
+import inspect
 import textwrap
 import time
+import ctypes
 
 __author__ = 'Robert Cope'
 
@@ -64,8 +67,16 @@ print_underline = partial(_print_formatter, ANSITermCodes.UNDERLINE)
 print_blinking = partial(_print_formatter, ANSITermCodes.BLINK)
 
 
-def should(msg):
-    return msg
+TestOutputFunctions = namedtuple("TestOutputFunctions", ["pass_", "ignore", "warn", "fail"])
+DefaultOutputFunctions = TestOutputFunctions(print_green, print_green, print_yellow, print_red)
+
+
+def should(behavior):
+    return "should %s" % behavior
+
+
+def must(behavior):
+    return "must %s" % behavior
 
 
 class TestNotImplemented(Exception):
@@ -81,29 +92,34 @@ def wrap_text_cleanly(text, width=80):
     return "\n".join(lines)
 
 
-def case_descriptor(target, behavior, width=80):
+def _test_method_decorator_constructor(prefix, subject, predicate, width=80, output_functions=DefaultOutputFunctions,
+                                       suppress_traceback=False):
     def decorator(func):
         @wraps(func)
         def decorated(*args, **kwargs):
             try:
                 ret_val = func(*args, **kwargs)
-                print_green(wrap_text_cleanly("[PASS] %s should %s" % (target, behavior), width=width))
+                output_functions.pass_(wrap_text_cleanly("[PASS] %s%s %s" % (prefix, subject, predicate), width=width))
                 return ret_val
             except TestNotImplemented:
-                print_yellow(wrap_text_cleanly("[IGNORED] %s should %s (NOT IMPLEMENTED)" % (target, behavior),
-                                               width=width))
+                output_msg = "[NOT IMPLEMENTED] %s%s %s" % (prefix, subject, predicate)
+                output_functions.warn(wrap_text_cleanly(output_msg, width=width))
             except IgnoreTest as e:
                 ignore_msg = "(%s)" % e.message if e.message else ""
-                print_yellow(wrap_text_cleanly("[IGNORED] %s should %s %s" % (target, behavior, ignore_msg),
-                                               width=width))
+                output_msg = "[IGNORED] %s%s %s (%s)" % (prefix, subject, predicate, ignore_msg)
+                output_functions.warn(wrap_text_cleanly(output_msg, width=width))
             except Exception:
-                print_red(wrap_text_cleanly("[RED] %s should %s" % (target, behavior), width=width))
-                print_red(traceback.format_exc())
+                output_functions.fail(wrap_text_cleanly("[FAIL] %s should %s" % (subject, predicate), width=width))
+                if not suppress_traceback:
+                    output_functions.fail(traceback.format_exc())
                 raise
-
         return decorated
-
     return decorator
+
+case_descriptor = partial(_test_method_decorator_constructor, "")
+unit_descriptor = partial(_test_method_decorator_constructor, "")
+scenario_descriptor = partial(_test_method_decorator_constructor, "Scenario: ")
+feature_descriptor = partial(_test_method_decorator_constructor, "Feature: ")
 
 
 def ignore_test(reason=""):
@@ -117,34 +133,28 @@ def ignore_test(reason=""):
     return decorator
 
 
-def case_name(name, width=80):
+def _test_case_class_decorator_constructor(prefix, name, print_class_docstring=True, width=80,
+                                           output_functions=DefaultOutputFunctions):
+    output_str = "%s%s" % (prefix, name)
+
     def decorator(old_class):
         class WrappedClass(old_class):
             @classmethod
             def setUpClass(cls):
-                print_green("-" * width)
-                print_green("\n".join(textwrap.wrap(name, width=width)))
-                print_green("-" * width)
+                output_functions.pass_("-" * width)
+                output_functions.pass_(wrap_text_cleanly(output_str, width=width))
+                output_functions.pass_("-" * width)
+                if print_class_docstring:
+                    output_functions.pass_(wrap_text_cleanly(inspect.getdoc(old_class)))
                 old_class.setUpClass()
 
         return WrappedClass
 
     return decorator
 
-
-def await_condition(description, condition_eval_callable, on_failure=lambda: True, timeout=10, poll_ms=100):
-    poll_s = poll_ms / 1000.0
-    start_time = time.time()
-
-    def should_continue():
-        return time.time() - start_time < timeout
-
-    while not condition_eval_callable():
-        if not should_continue():
-            on_failure()
-            raise AssertionError("Awaiting condition %s has timed out after %f seconds"
-                                 "" % (str(description), float(timeout)))
-        time.sleep(poll_s)
+case_name = partial(_test_case_class_decorator_constructor, "")
+feature = partial(_test_case_class_decorator_constructor, "Feature: ")
+scenario = partial(_test_case_class_decorator_constructor, "Scenario: ")
 
 
 class BDD(object):
@@ -163,11 +173,13 @@ class BDD(object):
             self.text_description = ""
             self.warn_exeptions = []
             self.ignore_exceptions = []
+            self.cleanup_func = lambda: True
 
-        def __call__(self, text_description, warn_exceptions=None, ignore_exceptions=None):
+        def __call__(self, text_description, warn_exceptions=None, ignore_exceptions=None, cleanup_func=lambda: True):
             self.text_description = text_description
             self.warn_exeptions = self.warn_exeptions if warn_exceptions is None else warn_exceptions
             self.ignore_exceptions = self.ignore_exceptions if ignore_exceptions is None else ignore_exceptions
+            self.cleanup_func = cleanup_func
             return self
 
         def __getattr__(self, item):
@@ -178,13 +190,15 @@ class BDD(object):
             return self
 
         def __exit__(self, exc_type, exc_val, exc_tb):
+            self.cleanup_func()
             return self.parent._exit_handler(exc_type, exc_val, exc_tb, self.index,
                                              self.warn_exeptions, self.ignore_exceptions)
 
-    def __init__(self, level_bullet="->", max_width=120, indent_str="  "):
+    def __init__(self, level_bullet="->", max_width=120, indent_str="  ", output_functions=DefaultOutputFunctions):
         self.level_bullet = level_bullet
         self.max_width = max_width
         self.indent_str = indent_str
+        self.output_functions = output_functions
         self.current_level = 0
         self.current_index = 0
         self.entry_data = {}
@@ -194,7 +208,7 @@ class BDD(object):
         if name in self.bdd_names:
             return self._Step(name, self)
         else:
-            raise ValueError("Invalid BDD level name \"%s\"." % name)
+            raise AttributeError("No such attribute %s" % name)
 
     def _enter_handler(self, level_name, text_description):
         current_index, current_level = self.current_index, self.current_level
@@ -205,7 +219,7 @@ class BDD(object):
         self.entry_data[current_index] = bdd_str
         return current_index
 
-    def _exit_handler(self, exc_type, exc_val, exc_tb, step_index, warn_excs, ignore_excs):
+    def _exit_handler(self, exc_type, exc_val, _, step_index, warn_excs, ignore_excs):
         self.current_level -= 1
         if not exc_type:
             self.exit_data[step_index] = (self.PASS, None)
@@ -229,19 +243,70 @@ class BDD(object):
         for key in sorted(self.exit_data.iterkeys()):
             entry_data, exit_data = self.entry_data[key], self.exit_data[key]
             if exit_data[0] is self.PASS:
-                print_green(wrap_text(entry_data, width=self.max_width))
+                self.output_functions.pass_(wrap_text(entry_data, width=self.max_width))
             elif exit_data[0] is self.IGNORE:
                 strs = (entry_data, "(Ignored Exception: %s)" % exit_data[1])
                 entry, exception_data = map(wrap_text, strs)
                 formatted_str = "%s\n\t\t%s" % (entry, exception_data)
-                print_green(formatted_str)
+                self.output_functions.ignore(formatted_str)
             elif exit_data[0] is self.WARNING:
                 strs = ("%s  **WARNING**" % entry_data, "(Exception: %s)" % exit_data[1])
                 entry, exception_data = map(wrap_text, strs)
                 formatted_str = "%s\n\t\t%s" % (entry, exception_data)
-                print_yellow(formatted_str)
+                self.output_functions.warn(formatted_str)
             elif exit_data[0] is self.FAIL:
                 strs = ("%s **FAIL**" % entry_data, "(Exception: %s)" % exit_data[1])
                 entry, exception_data = map(wrap_text, strs)
                 formatted_str = "%s\n\t\t%s" % (entry, exception_data)
-                print_red(formatted_str)
+                self.output_functions.fail(formatted_str)
+
+
+def modify_buffer_object(source_buffer, dest_buffer, nbytes=None):
+    """
+    Modify a python object that supports the buffer interface internally.
+    This is useful for testing things like socket.recv_into()
+
+    dest_buffer must be smaller than source_buffer, or the code will assert.
+
+    :param source_buffer: The source for the new data to be written into dest_buffer.
+    :param dest_buffer: The buffer to be modified inline.
+    :param nbytes: (OPTIONAL) The maximum number of bytes to write into the dest_buffer.
+        If set, the number of bytes written is the minimum of nbytes and the source length.
+        Default: None
+    :return: The total number of bytes written into dest_buffer.
+    """
+    assert len(source_buffer) < len(dest_buffer)
+    copy_len = len(source_buffer) if nbytes is None else min(nbytes, source_buffer)
+    buffer_ptr = (ctypes.c_byte * len(dest_buffer)).from_buffer(dest_buffer)
+    new_value_ptr = (ctypes.c_byte * len(source_buffer)).from_buffer_copy(source_buffer)
+    buffer_ptr[:copy_len] = new_value_ptr[:]
+    return copy_len
+
+
+def await_condition(description, condition_eval_callable, on_failure=lambda: True, timeout=10, poll_ms=100):
+    """
+    Await a condition function to return True, otherwise assert.
+
+    :param description: A string description of the condition we are awaiting.
+    :param condition_eval_callable: The callable of arity 0 (function, lambda, etc.) to monitor.
+        This should return False when not completed, and return True when done.
+    :param on_failure: (OPTIONAL) A callable of arity 0 that is called when a failure condition occurs.
+        Default: NOOP
+    :param timeout: (OPTIONAL) The number of seconds to wait for the condition to become True.
+        Default: 10 s
+    :param poll_ms: (OPTIONAL) The period of time between checking the condition.
+        Default: 100 ms
+    :return: None. Will raise an AssertionError if the condition did not return True in the allotted time.
+    """
+    poll_s = poll_ms / 1000.0
+    start_time = time.time()
+
+    def should_continue():
+        return time.time() - start_time < timeout
+
+    while not condition_eval_callable():
+        if not should_continue():
+            on_failure()
+            raise AssertionError("Awaiting condition %s has timed out after %f seconds"
+                                 "" % (str(description), float(timeout)))
+        time.sleep(poll_s)
