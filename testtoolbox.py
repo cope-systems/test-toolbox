@@ -67,8 +67,8 @@ print_underline = partial(_print_formatter, ANSITermCodes.UNDERLINE)
 print_blinking = partial(_print_formatter, ANSITermCodes.BLINK)
 
 
-TestOutputFunctions = namedtuple("TestOutputFunctions", ["pass_", "ignore", "warn", "fail"])
-DefaultOutputFunctions = TestOutputFunctions(print_green, print_green, print_yellow, print_red)
+TestOutputFunctions = namedtuple("TestOutputFunctions", ["info", "pass_", "ignore", "warn", "fail"])
+DefaultOutputFunctions = TestOutputFunctions(print_purple, print_green, print_green, print_yellow, print_red)
 
 
 def should(behavior):
@@ -97,19 +97,20 @@ def _test_method_decorator_constructor(prefix, subject, predicate, width=80, out
     def decorator(func):
         @wraps(func)
         def decorated(*args, **kwargs):
+            output_functions.info(wrap_text_cleanly("%s%s %s" % (prefix, subject, predicate), width=width))
             try:
                 ret_val = func(*args, **kwargs)
-                output_functions.pass_(wrap_text_cleanly("[PASS] %s%s %s" % (prefix, subject, predicate), width=width))
+                output_functions.pass_(wrap_text_cleanly("Result: [PASS]" , width=width))
                 return ret_val
             except TestNotImplemented:
-                output_msg = "[NOT IMPLEMENTED] %s%s %s" % (prefix, subject, predicate)
+                output_msg = "Result: [NOT IMPLEMENTED]"
                 output_functions.warn(wrap_text_cleanly(output_msg, width=width))
             except IgnoreTest as e:
                 ignore_msg = "(%s)" % e.message if e.message else ""
-                output_msg = "[IGNORED] %s%s %s (%s)" % (prefix, subject, predicate, ignore_msg)
+                output_msg = "Result: [IGNORED] %s" % ignore_msg
                 output_functions.warn(wrap_text_cleanly(output_msg, width=width))
-            except Exception:
-                output_functions.fail(wrap_text_cleanly("[FAIL] %s should %s" % (subject, predicate), width=width))
+            except BaseException as e:
+                output_functions.fail(wrap_text_cleanly("Result: [FAIL] %s" % repr(e), width=width))
                 if not suppress_traceback:
                     output_functions.fail(traceback.format_exc())
                 raise
@@ -141,11 +142,11 @@ def _test_case_class_decorator_constructor(prefix, name, print_class_docstring=T
         class WrappedClass(old_class):
             @classmethod
             def setUpClass(cls):
-                output_functions.pass_("-" * width)
-                output_functions.pass_(wrap_text_cleanly(output_str, width=width))
-                output_functions.pass_("-" * width)
+                output_functions.info("-" * width)
+                output_functions.info(wrap_text_cleanly(output_str, width=width))
+                output_functions.info("-" * width)
                 if print_class_docstring:
-                    output_functions.pass_(wrap_text_cleanly(inspect.getdoc(old_class)))
+                    output_functions.info(wrap_text_cleanly(inspect.getdoc(old_class)))
                 old_class.setUpClass()
 
         return WrappedClass
@@ -194,7 +195,7 @@ class BDD(object):
             return self.parent._exit_handler(exc_type, exc_val, exc_tb, self.index,
                                              self.warn_exeptions, self.ignore_exceptions)
 
-    def __init__(self, level_bullet="->", max_width=120, indent_str="  ", output_functions=DefaultOutputFunctions):
+    def __init__(self, level_bullet="->", max_width=120, indent_str="   ", output_functions=DefaultOutputFunctions):
         self.level_bullet = level_bullet
         self.max_width = max_width
         self.indent_str = indent_str
