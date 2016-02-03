@@ -13,7 +13,7 @@ setup(
     description="Tools and extensions for testing and the unittest library.",
     license="BSD",
     keywords="test testing unittest bdd",
-    url="https://bitbucket.org/rpcope1/testtoolboxt",
+    url="https://bitbucket.org/rpcope1/testtoolbox",
     packages=['testtoolbox'],
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
