@@ -14,6 +14,7 @@ setup(
     license="BSD",
     keywords="test testing unittest bdd",
     url="https://bitbucket.org/rpcope1/testtoolbox",
+    scripts=['ez_setup.py'],
     packages=['testtoolbox'],
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
