@@ -8,10 +8,17 @@ from testtoolbox.helpers import modify_buffer_object
 class ExampleTest(TestCase):
     """
     Lorem Ipsum blah blah blah
+    Lorem Ipsum blah blah blah
+    Lorem Ipsum blah blah blah
     """
 
     @scenario_descriptor("The BDD tool", should("look nice and produce reasonable output."))
     def test_simple_bdd_tool(self):
+        """
+        Lorem Ipsum blah blah blah
+        Lorem Ipsum blah blah blah
+        Lorem Ipsum blah blah blah
+        """
         bdd = BDD()
 
         with bdd.given("a positive number"):

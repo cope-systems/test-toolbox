@@ -43,7 +43,8 @@ blinking = partial(_output_formatter, ANSITermCodes.BLINK, terminator_code=ANSIT
 
 def _print_formatter(color_str, *args):
     args = args + (ANSITermCodes.RESET,)
-    print(color_str, *args)
+    new_first_arg = "%s%s" % (color_str, args[0]) if args else color_str
+    print(new_first_arg, *args[1:])
 
 
 print_purple = partial(_print_formatter, ANSITermCodes.PURPLE)

@@ -22,24 +22,27 @@ class IgnoreTest(Exception):
     pass
 
 
-def wrap_text_cleanly(text, width=120, preserve_newlines=False, subsequent_indent='\t\t'):
+def wrap_text_cleanly(text, width=120, preserve_newlines=False, initial_indent='', subsequent_indent='\t\t'):
     text_units = text.split('\n') if preserve_newlines else [text]
-    wrap_function = partial(textwrap.wrap, width=width, subsequent_indent=subsequent_indent)
+    wrap_function = partial(textwrap.wrap, width=width, initial_indent=initial_indent,
+                            subsequent_indent=subsequent_indent)
     cleaned_text_units = map(wrap_function, text_units)
     return "\n".join([line for text_unit in cleaned_text_units for line in text_unit])
 
 
-def _test_method_decorator_constructor(prefix, subject, predicate, width=120, output_functions=DefaultOutputFunctions,
-                                       suppress_traceback=False, print_method_docstring=True):
+def _test_method_decorator_constructor(prefix, subject, predicate, width=120, print_method_docstring=True,
+                                       docstring_indent=' ', suppress_traceback=False,
+                                       output_functions=DefaultOutputFunctions):
     def decorator(func):
         @wraps(func)
         def decorated(*args, **kwargs):
             output_functions.info(wrap_text_cleanly("%s%s %s" % (prefix, subject, predicate), width=width))
             if print_method_docstring and inspect.getdoc(func):
-                output_functions.info(wrap_text_cleanly(inspect.getdoc(func), preserve_newlines=True))
+                output_functions.info(wrap_text_cleanly(inspect.getdoc(func), preserve_newlines=True,
+                                                        initial_indent=docstring_indent))
             try:
                 ret_val = func(*args, **kwargs)
-                output_functions.pass_(wrap_text_cleanly("Result: [PASS]" , width=width))
+                output_functions.pass_(wrap_text_cleanly("Result: [PASS]", width=width))
                 return ret_val
             except TestNotImplemented:
                 output_msg = "Result: [NOT IMPLEMENTED]"
@@ -74,7 +77,7 @@ def ignore_test(reason=""):
     return decorator
 
 
-def _test_case_class_decorator_constructor(prefix, name, print_class_docstring=True, width=120,
+def _test_case_class_decorator_constructor(prefix, name, print_class_docstring=True, docstring_indent=' ', width=120,
                                            output_functions=DefaultOutputFunctions):
     output_str = "%s%s" % (prefix, name)
 
@@ -86,7 +89,8 @@ def _test_case_class_decorator_constructor(prefix, name, print_class_docstring=T
                 output_functions.info(wrap_text_cleanly(output_str, width=width))
                 output_functions.info("-" * width)
                 if print_class_docstring and inspect.getdoc(old_class):
-                    output_functions.info(wrap_text_cleanly(inspect.getdoc(old_class), preserve_newlines=True))
+                    output_functions.info(wrap_text_cleanly(inspect.getdoc(old_class), preserve_newlines=True,
+                                                            initial_indent=docstring_indent))
                 old_class.setUpClass()
 
         return WrappedClass
