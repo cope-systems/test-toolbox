@@ -16,7 +16,7 @@ def modify_buffer_object(source_buffer, dest_buffer, nbytes=None):
         Default: None
     :return: The total number of bytes written into dest_buffer.
     """
-    assert len(source_buffer) < len(dest_buffer)
+    assert len(source_buffer) <= len(dest_buffer)
     copy_len = len(source_buffer) if nbytes is None else min(nbytes, source_buffer)
     buffer_ptr = (ctypes.c_byte * len(dest_buffer)).from_buffer(dest_buffer)
     new_value_ptr = (ctypes.c_byte * len(source_buffer)).from_buffer_copy(source_buffer)

@@ -1,3 +1,3 @@
 __author__ = 'Robert Cope'
-__version__ = '0.0.1.a5'
+__version__ = '0.0.1a6'
 
