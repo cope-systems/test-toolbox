@@ -91,6 +91,36 @@ These include:
   * await_condition: Wait for a specified callable to return true within a given time, or assert on timeout.
   
   * modify_buffer_object: Modify a python object that supports the buffer interface in place (good for mocking socket.recv_into)
+  
+#### Spies for Python callables
+
+Another useful and powerful tool included in this toolbox is the callable Spy implementation. This tool allows testers
+to monitor and reason about invoked callables that can be dependency injected or monkey patched in test code. The Spy
+can be both applied to mock instances of an object, as well as applied in-situ to real objects. The Spy also has a 
+powerful matching system that aligns specified praedicates to callable invocations to get fine grained (and user-extendable)
+checking of how a callable is being used.
+
+Example:
+
+```
+     from testtoolbox.spy import apply_function_spy, equal_to, any_of, instance_of
+    
+     @apply_function_spy
+     def my_function(foo, bar=2):
+         return foo + bar
+         
+     my_function(1)
+     my_function.assert_one_exact_match(instance_of(int), equal_to(2))
+     
+     my_function(5)
+     
+     # Use a user created praedicate
+     def is_positive(argument):
+          return argument > 0
+          
+     my_function.assert_all_partial_match(is_positive)
+    
+```
 
 # Other recommended libraries
 
