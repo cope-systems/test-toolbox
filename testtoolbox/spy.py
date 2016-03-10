@@ -3,6 +3,10 @@ from functools import update_wrapper
 from types import MethodType, FunctionType, BuiltinFunctionType
 from collections import namedtuple
 from itertools import islice
+import sys
+
+IS_PY2 = sys.version_info[0] == 2
+
 
 TargetInvocation = namedtuple("TargetInvocation", ("args", "kwargs", "result"))
 
@@ -25,6 +29,11 @@ class Spy(object):
         self.successful_invocations = []
         self.successful_results = []
         self.verbose = verbose
+        # If this is a decorated instance method, we've probably got to reinitialize the Spy
+        # the first time it gets accessed (such that each instance has it's own Spy per method
+        # per instance). To do this, we have to bootstrap new a new spy on first access (when
+        # needs_reinit is likely set).
+        self.needs_reinit = False
 
     def __call__(self, *args, **kwargs):
         result = self.target_func(*args, **kwargs)
@@ -35,7 +44,18 @@ class Spy(object):
         return result
 
     def __get__(self, instance, owner):
-        return self.get_type(self, instance, owner)
+        if instance and self.needs_reinit:
+            if IS_PY2:
+                reinitialized = self.get_type(Spy(self.target_func, is_method=True), instance, owner)
+            else:
+                reinitialized = self.get_type(Spy(self.target_func, is_method=True), instance)
+            setattr(instance, self.target_func.__name__, reinitialized)
+            return reinitialized
+        else:
+            if IS_PY2:
+                return self.get_type(self, instance, owner)
+            else:
+                return self.get_type(self, instance)
 
     @property
     def num_invocations(self):
@@ -62,7 +82,7 @@ class Spy(object):
             call_args, call_kwargs, _ = invocation_data
             return _calculate_match(self.target_func_argspec, args, kwargs, call_args, call_kwargs, exact=True)
         return times_praedicate(
-            filter(None, map(check_invocation, self.successful_invocations)),
+            [invoc_matched for invoc_matched in map(check_invocation, self.successful_invocations) if invoc_matched],
             self.successful_invocations
         )
 
@@ -83,7 +103,7 @@ class Spy(object):
             call_args, call_kwargs, _ = invocation_data
             return _calculate_match(self.target_func_argspec, args, kwargs, call_args, call_kwargs, exact=False)
         return times_praedicate(
-            filter(None, map(check_invocation, self.successful_invocations)),
+            [invoc_matched for invoc_matched in map(check_invocation, self.successful_invocations) if invoc_matched],
             self.successful_invocations
         )
 
@@ -188,11 +208,11 @@ class Spy(object):
     def assert_all_result_match(self, *args, **kwargs):
         self.assert_quantified_result_match(always, *args, **kwargs)
 
-    def clear_invocations(self):
+    def reset_invocations(self):
         self.successful_invocations = []
         return True
 
-    def clear_results(self):
+    def reset_results(self):
         self.successful_results = []
         return True
 
@@ -302,14 +322,16 @@ def apply_function_spy(func):
     return Spy(func)
 
 
-def apply_method_spy(func):
+def apply_method_spy(method):
     """
     Apply a spy to an instance method declaration on an object. This must be handled differently because
     of the way Python handles decorators and does virtual method dispatch on instance methods.
-    :param func: The instance method (or possibly classmethod) to spy on.
+    :param method: The instance method (or possibly classmethod) to spy on.
     :return: The method with attached spy.
     """
-    return Spy(func, is_method=True)
+    new_spy = Spy(method, is_method=True)
+    new_spy.needs_reinit = True
+    return new_spy
 
 
 def anything(_):
