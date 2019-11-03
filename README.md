@@ -1,4 +1,5 @@
 # Python Test Toolbox
+[![Build Status](https://travis-ci.org/cope-systems/test-toolbox.svg?branch=master)](https://travis-ci.org/cope-systems/test-toolbox)
 ### A simple set of enhancements and tools for unittest compatible tests.
 
 This library adds a number of extras for test code written in Python in order to enhance understandability, 
