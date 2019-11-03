@@ -1,3 +1,14 @@
+"""
+This modules contains miscellaneous helpers for various testing and stubbing scenarios.
+
+Included are:
+
+* modify_buffer_object() -- Modifies a Python buffer object to allow the user to replace weird and challenging
+    functions/methods like socket.recv_into()
+* await_condition() -- Repeated evaluates a callable at a specified poll rate for a given amount of time, and
+    either returns if the callable became true quickly enough, or asserts otherwise.
+"""
+
 import ctypes
 import time
 
@@ -24,22 +35,28 @@ def modify_buffer_object(source_buffer, dest_buffer, nbytes=None):
     return copy_len
 
 
-def await_condition(description, condition_eval_callable, on_failure=lambda: True, timeout=10, poll_ms=100):
+def await_condition(description, condition_eval_callable, on_failure=lambda: True, timeout=10, poll_s=0.1):
     """
-    Await a condition function to return True, otherwise assert.
+    Await a condition function to return True, otherwise raise an AssertionError if
+    the condition did not return True within the alloted time.
 
     :param description: A string description of the condition we are awaiting.
+    :type description: str
     :param condition_eval_callable: The callable of arity 0 (function, lambda, etc.) to monitor.
         This should return False when not completed, and return True when done.
-    :param on_failure: (OPTIONAL) A callable of arity 0 that is called when a failure condition occurs.
+    :type condition_eval_callable: -> bool
+    :param on_failure: A callable of arity 0 that is called when a failure condition occurs.
         Default: NOOP
-    :param timeout: (OPTIONAL) The number of seconds to wait for the condition to become True.
+    :type on_failure: -> NoneType
+    :param timeout:  The number of seconds to wait for the condition to become True.
         Default: 10 s
-    :param poll_ms: (OPTIONAL) The period of time between checking the condition.
+    :type timeout: float | int
+    :param poll_s: The period of time between checking the condition.
         Default: 100 ms
-    :return: None. Will raise an AssertionError if the condition did not return True in the allotted time.
+    :type poll_s: float | int
+    :return: None.
+    :raises: AssertionError
     """
-    poll_s = poll_ms / 1000.0
     start_time = time.time()
 
     def should_continue():
@@ -48,6 +65,7 @@ def await_condition(description, condition_eval_callable, on_failure=lambda: Tru
     while not condition_eval_callable():
         if not should_continue():
             on_failure()
-            raise AssertionError("Awaiting condition %s has timed out after %f seconds"
-                                 "" % (str(description), float(timeout)))
+            raise AssertionError(
+                "Awaiting condition {0} has timed out after {1} seconds".format(description, timeout)
+            )
         time.sleep(poll_s)

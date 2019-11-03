@@ -1,14 +1,14 @@
 # Python Test Toolbox
 ### A simple set of enhancements and tools for unittest compatible tests.
 
-This library adds a number of extras for unittest-based test code to enhance
-understandability, and reduce duplicate code.
+This library adds a number of extras for test code written in Python in order to enhance understandability, 
+and reduce duplicate code.
 
 ### Features
 #### Output formatting code
 
 Most of the commonly available ANSI formatters (which provide nice colored output on terminals, 
-or properties like bolding), are conveniently wrapped in the output module of testtoolbox.
+or properties like bolding), are conveniently wrapped in the output module of test_toolbox.
 
 Supported ANSI modes:
 
@@ -27,7 +27,7 @@ Supported ANSI modes:
 These are accessible both through convenience print functions, as well as raw text format functions. For example:
 
 ```
-    >>> from testtoolbox.output import print_purple, purple, bold
+    >>> from test_toolbox.output import print_purple, purple, bold
     >>> print_purple("Just", "like", "regular", "print,", "except purple")
     Just like regular print, except purple
     >>> bold_purple_str = bold(purple("this is a string"))
@@ -40,18 +40,18 @@ These provide captioning and explanation for both the BDD style, and for basic u
 BDD Example:
 
 ```
-    from testtoolbox.testflow import BDD
+    from test_toolbox.testflow import BDD
     
-    bdd = BDD()
+    with BDD.scenario("Testing on integers") as bdd:
     
-    with bdd.given("the integer 1"):
-         a = 1
+        bdd.given("the integer 1")
+        a = 1
          
-    with bdd.when("it is multiplied by two"):
-         a *= 2
+        bdd.when("it is multiplied by two")
+        a *= 2
          
-    with bdd.then("it should be equal to two"):
-         assert a == 2
+        bdd.then("it should be equal to two")
+        assert a == 2
 ```
 
 This can be used in conjunction with the unittest decorators, and can be nested:
@@ -59,11 +59,11 @@ This can be used in conjunction with the unittest decorators, and can be nested:
 ```
     from unittest import TestCase
     
-    from testtoolbox.testflow import should, scenario_descriptor, feature, BDD
-    from testtoolbox.helpers import modify_buffer_object
+    from test_toolbox.testflow import should, scenario_descriptor, feature, BDD
+    from test_toolbox.helpers import modify_buffer_object
     
     
-    @feature("The testtoolbox code and some other Python")
+    @feature("The test_toolbox code and some other Python")
     class ExampleTest(TestCase):
         """
         Lorem Ipsum blah blah blah
@@ -71,15 +71,14 @@ This can be used in conjunction with the unittest decorators, and can be nested:
     
         @scenario_descriptor("The number one", should("be the identity element for multiplication on real numbers"))
         def test_simple_bdd_tool(self):
-            bdd = BDD()
-            
-            with bdd.given("the integer 1"):
+            with BDD() as bdd:
+                bdd.given("the integer 1")
                 a = 1
          
-            with bdd.when("it is multiplied by two"):
+                bdd.when("it is multiplied by two")
                 a *= 2
          
-            with bdd.then("it should be equal to two"):
+                bdd.then("it should be equal to two")
                 assert a == 2
 ```
 
@@ -103,7 +102,7 @@ checking of how a callable is being used.
 Example:
 
 ```
-     from testtoolbox.spy import apply_function_spy, equal_to, any_of, instance_of
+     from test_toolbox.spy import apply_function_spy, equal_to, any_of, instance_of
     
      @apply_function_spy
      def my_function(foo, bar=2):

@@ -1,25 +1,38 @@
-import ez_setup
-ez_setup.use_setuptools()
-
+#!/usr/bin/env python
+import os
 from setuptools import setup
-from testtoolbox import __version__, __author__
 
+
+def read_file(fname):
+    try:
+        return open(os.path.join(os.path.dirname(__file__), fname)).read()
+    except IOError:
+        return ''
+
+
+REQUIREMENTS = [l for l in read_file('requirements.txt').split('\n') if l and not l.strip().startswith('#')]
+DEV_REQUIREMENTS = [l for l in read_file('dev-requirements.txt').split('\n')
+                    if l and not l.strip().startswith('#') and not l.strip().startswith("-r")] + REQUIREMENTS
 
 setup(
     name="TestToolbox",
-    version=__version__,
-    author=__author__,
-    author_email="rpcope1@gmail.com",
-    description="Tools and extensions for testing and the unittest library.",
-    license="BSD",
-    keywords="test testing unittest bdd",
-    url="https://bitbucket.org/rpcope1/testtoolbox",
-    scripts=['ez_setup.py'],
-    packages=['testtoolbox'],
+    version="0.1.0",
+    url='https://github.com/cope-systems/test_toolbox',
+    description='Tools and extensions for testing in Python.',
+    long_description=read_file("README.md"),
+    author='Robert Cope',
+    author_email='robert@copesystems.com',
+    license='BSD',
+    platforms='any',
+    packages=["test_toolbox"],
+    install_requires=REQUIREMENTS,
+    tests_require=DEV_REQUIREMENTS,
+    test_suite="test_this",
     classifiers=[
-        "Development Status :: 2 - Pre-Alpha",
+        "Development Status :: 3 - Alpha",
         "Topic :: Utilities",
         "Topic :: Software Development :: Testing",
         "License :: OSI Approved :: BSD License",
     ],
+    include_package_data=True
 )

@@ -1,0 +1,9 @@
+include LICENSE
+include MANIFEST.in
+include README.md
+include requirements.txt
+include test_toolbox/*
+
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * *.orig

@@ -1,10 +1,11 @@
 from unittest import TestCase
 
-from testtoolbox.testflow import should, scenario_descriptor, feature, BDD
-from testtoolbox.helpers import modify_buffer_object
+from test_toolbox.bdd import BDD
+from test_toolbox.unittest.testflow import should, scenario_descriptor, feature
+from test_toolbox.helpers import modify_buffer_object
 
 
-@feature("The testtoolbox code and some other Python")
+@feature("The test_toolbox code and some other Python")
 class ExampleTest(TestCase):
     """
     Lorem Ipsum blah blah blah

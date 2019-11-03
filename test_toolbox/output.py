@@ -1,6 +1,55 @@
+"""
+The output module provides convenience methods for utilizing ANSI terminal color codes,
+which may be used to help visually differentiate output from scripts and tests.
+
+There are two ways primary ways to consume this module: using output formatter functions or using
+print wrapper functions.
+
+The following output format functions may be used to generate new text with the appropriate ANSI terminal
+codes to get the named effect:
+
+* purple()
+* green()
+* red()
+* yellow()
+* green()
+* blue()
+* cyan()
+* white()
+* bold()
+* half_bright()
+* underline()
+* blinking()
+
+Each of these functions takes one argument and returns a string.
+
+The following print functions work as you would expect the normal print function to, but print the
+arguments to the function with the named effect:
+
+* print_purple()
+* print_green()
+* print_red()
+* print_yellow()
+* print_cyan()
+* print_blue()
+* print_black()
+* print_white()
+* print_bold()
+* print_half_bright()
+* print_underline()
+* print_blinking()
+
+All of these functions have the same arity as the underlying print function (that is to say they all may
+take zero or more arguments).
+"""
 from __future__ import print_function
+
+import textwrap
 from collections import namedtuple
 from functools import partial
+import sys
+
+IS_PY2 = sys.version_info[0] == 2
 
 
 class ANSITermCodes(object):
@@ -24,7 +73,7 @@ class ANSITermCodes(object):
 
 
 def _output_formatter(output_code, text, terminator_code=ANSITermCodes.RESET):
-    return "%s%s%s" % (output_code, str(text), terminator_code)
+    return "{0}{1}{2}".format(output_code, text, terminator_code)
 
 
 purple = partial(_output_formatter, ANSITermCodes.PURPLE, terminator_code=ANSITermCodes.NORMAL_COLOR)
@@ -42,9 +91,15 @@ blinking = partial(_output_formatter, ANSITermCodes.BLINK, terminator_code=ANSIT
 
 
 def _print_formatter(color_str, *args):
+    if args:
+         args = ("{0}{1}".format(color_str, args[0]),) + args
+    else:
+        args = (color_str,) + args
     args = args + (ANSITermCodes.RESET,)
-    new_first_arg = "%s%s" % (color_str, args[0]) if args else color_str
-    print(new_first_arg, *args[1:])
+    if IS_PY2:
+        print(*map(unicode, args))
+    else:
+        print(*args)
 
 
 print_purple = partial(_print_formatter, ANSITermCodes.PURPLE)
@@ -59,5 +114,14 @@ print_bold = partial(_print_formatter, ANSITermCodes.BOLD)
 print_half_bright = partial(_print_formatter, ANSITermCodes.HALF_BRIGHT)
 print_underline = partial(_print_formatter, ANSITermCodes.UNDERLINE)
 print_blinking = partial(_print_formatter, ANSITermCodes.BLINK)
+
 TestOutputFunctions = namedtuple("TestOutputFunctions", ["info", "pass_", "ignore", "warn", "fail"])
 DefaultOutputFunctions = TestOutputFunctions(print_purple, print_green, print_green, print_yellow, print_red)
+
+
+def wrap_text_cleanly(text, width=120, preserve_newlines=False, initial_indent='', subsequent_indent='\t\t'):
+    text_units = text.split('\n') if preserve_newlines else [text]
+    wrap_function = partial(textwrap.wrap, width=width, initial_indent=initial_indent,
+                            subsequent_indent=subsequent_indent)
+    cleaned_text_units = map(wrap_function, text_units)
+    return "\n".join([line for text_unit in cleaned_text_units for line in text_unit])
