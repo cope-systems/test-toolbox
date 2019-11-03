@@ -1,3 +1,5 @@
 -r requirements.txt
 tox
 assertpy
+sphinx
+sphinx-rtd-theme

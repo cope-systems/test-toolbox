@@ -6,12 +6,57 @@ from itertools import islice
 import sys
 
 IS_PY2 = sys.version_info[0] == 2
+_REPR_MAX_WIDTH = [5000]
+
+
+def set_reporting_max_width(w):
+    """
+    Set the max width for reported parameters. This is used to that failures don't overflow
+    terminals in the event arguments are dumped.
+
+    :param w: The new max width to enforce for the module
+    :type w: int
+    :return: True
+    """
+    _REPR_MAX_WIDTH[0] = int(w)
+    return True
+
+
+def get_reporting_max_width():
+    """
+    Get the current max width for reported parameters used in the Spy module.
+
+    :return: The current reported max width.
+    :rtype: int
+    """
+    return _REPR_MAX_WIDTH[0]
+
+
+def _max_length_repr(obj, max_width=None):
+    max_width = max_width or _REPR_MAX_WIDTH[0]
+    result_str = repr(obj)
+    if len(result_str) > max_width:
+        return result_str[:max_width-3] + "..."
+    else:
+        return result_str
 
 
 TargetInvocation = namedtuple("TargetInvocation", ("args", "kwargs", "result"))
 
 
 class Spy(object):
+    """
+    A Spy is an callable wrapper which intercepts the invocations and results of the
+    wrapped function, method, or other callable in order to allow users to examine
+    and verify how callables might be consumed by other code.
+
+    :param target_func: A function of any arity that will be wrapped with by this Spy.
+    :param is_method: True if this is wrapped an uninitialized method (i.e. in a class declaration), False otherwise.
+    :param is_not_inspectable: True if this is a built-in (i.e. implemented in C) or is otherwise unable to be
+        inspected by the "inspect" module, False otherwise.
+    :param verbose: True if verbose reporting is desired, False otherwise.
+    :returns: A new callable, which wraps target_func and may be used as a stand in.
+    """
     def __init__(self, target_func, is_method=False, is_not_inspectable=False, verbose=True):
         self.target_func = target_func
         self.is_weird_py2_call_method = False
@@ -76,6 +121,7 @@ class Spy(object):
     def num_invocations(self):
         """
         Access the number of successful invocations recorded.
+
         :return: The integer number of invocations the Spy knows about.
         """
         return len(self.successful_invocations)
@@ -137,6 +183,62 @@ class Spy(object):
         successful_results = map(lambda o: o[2], self.successful_invocations)
         return times_predicate(map(result_predicate, successful_results))
 
+    def check_quantified_partial_plus_result_match(self, times_predicate, result_predicate, *args, **kwargs):
+        """
+        Check the spied results of all of the callable invocations, see if any match satisfies the number of
+        times predicate, the result predicate and the given partial invocation args/kwargs predicates.
+
+        :param times_predicate: An arity 2 predicate that takes the successful invocation list, and the total
+            invocation list, returns true or false based on these matching number of times executed expectation
+            embedded in this predicate.
+        :param result_predicate: An arity 1 predicate to match against the recorded result of a function call.
+        :param args: The predicate positional arguments to match up against the call arguments, to check and verify
+            against. These should all be arity 1 and return True/False.
+        :param kwargs: The predicate keyword arguments to match up against the call arguments, to check and verify
+            against. These should all be arity 1 and return True/False.
+        :return: True all of the predicates satisfied, False otherwise.
+        """
+        def check_invocation(invocation_data):
+            call_args, call_kwargs, result = invocation_data
+            params_match = _calculate_match(
+                self.target_func_argspec, args, kwargs, call_args, call_kwargs, exact=False
+            )
+            result_matches = result_predicate(result)
+            return params_match and result_matches
+        return times_predicate(
+            [invoc_matched for invoc_matched in map(check_invocation, self.successful_invocations) if invoc_matched],
+            self.successful_invocations
+        )
+
+    def check_quantified_exact_plus_result_match(self, times_predicate, result_predicate, *args, **kwargs):
+        """
+        Check the spied results of all of the callable invocations, see if any match satisfies the number of
+        times predicate, the result predicate and the given exact invocation args/kwargs predicates.
+
+        :param times_predicate: An arity 2 predicate that takes the successful invocation list, and the total
+            invocation list, returns true or false based on these matching number of times executed expectation
+            embedded in this predicate.
+        :param result_predicate: An arity 1 predicate to match against the recorded result of a function call.
+        :param args: The predicate positional arguments to match up against the call arguments, to check and verify
+            against. These should all be arity 1 and return True/False.
+        :param kwargs: The predicate keyword arguments to match up against the call arguments, to check and verify
+            against. These should all be arity 1 and return True/False.
+        :return: True all of the predicates satisfied, False otherwise.
+        """
+
+        def check_invocation(invocation_data):
+            call_args, call_kwargs, result = invocation_data
+            params_match = _calculate_match(
+                self.target_func_argspec, args, kwargs, call_args, call_kwargs, exact=True
+            )
+            result_matches = result_predicate(result)
+            return params_match and result_matches
+
+        return times_predicate(
+            [invoc_matched for invoc_matched in map(check_invocation, self.successful_invocations) if invoc_matched],
+            self.successful_invocations
+        )
+
     def assert_quantified_exact_match(self, times_predicate, *args, **kwargs):
         """
         Assert that an exact match exists for the given times invoked predicate and argument matcher predicate.
@@ -149,7 +251,8 @@ class Spy(object):
             against. These should all be arity 1 and return True/False.
         :param kwargs: The predicate keyword arguments to match up against the call arguments, to check and verify
             against. These should all be arity 1 and return True/False.
-        :return: None. If the matches can not be satisfied, this raises an AssertionError.
+        :return: None.
+        :raises: AssertionError on failure to match.
         """
         result = self.check_quantified_exact_match(times_predicate, *args, **kwargs)
         if not result and not self.verbose:
@@ -157,7 +260,7 @@ class Spy(object):
         elif not result:
             raise AssertionError(
                 "Failed to find a matching partial invocation!\n"
-                "All invocations:\n[{}]".format(",\n".join(map(repr, self.successful_invocations)))
+                "All invocations:\n[{}]".format(",\n".join(map(_max_length_repr, self.successful_invocations)))
             )
 
     def assert_quantified_partial_match(self, times_predicate, *args, **kwargs):
@@ -172,7 +275,8 @@ class Spy(object):
             against. These should all be arity 1 and return True/False.
         :param kwargs: The predicate keyword arguments to match up against the call arguments, to check and verify
             against. These should all be arity 1 and return True/False.
-        :return: None. If the matches can not be satisfied, this raises an AssertionError.
+        :return: None.
+        :raises: AssertionError on failure to match.
         """
         result = self.check_quantified_partial_match(times_predicate, *args, **kwargs)
         if not result and not self.verbose:
@@ -180,7 +284,7 @@ class Spy(object):
         elif not result:
             raise AssertionError(
                 "Failed to find a matching partial invocation!\n"
-                "All invocations:\n[{}]".format(",\n".join(map(repr, self.successful_invocations)))
+                "All invocations:\n[{}]".format(",\n".join(map(_max_length_repr, self.successful_invocations)))
             )
 
     def assert_quantified_result_match(self, times_predicate, result_predicate):
@@ -191,7 +295,8 @@ class Spy(object):
             invocation list, returns true or false based on these matching number of times executed expectation
             embedded in this predicate.
         :param result_predicate: An arity 1 predicate to match against the recorded result of a function call.
-        :return: None. Will raise an AssertionError if no match was found.
+        :return: None.
+        :raises: AssertionError on failure to match.
         """
         result = self.check_quantified_result_match(times_predicate, result_predicate)
         if not result and not self.verbose:
@@ -199,41 +304,163 @@ class Spy(object):
         elif not result:
             raise AssertionError(
                 "Failed to find a matching result!\n"
-                "All invocation results:\n[{}]".format(",\n".join(map(repr, self.successful_results)))
+                "All invocation results:\n[{}]".format(",\n".join(map(_max_length_repr, self.successful_results)))
+            )
+
+    def assert_quantified_partial_plus_result_match(self, times_predicate, result_predicate, *args, **kwargs):
+        """
+        Assert over the spied results of all of the callable invocations, see if any match satisfies the number of
+        times predicate, the result predicate and the given partial invocation args/kwargs predicates.
+
+        :param times_predicate: An arity 2 predicate that takes the successful invocation list, and the total
+            invocation list, returns true or false based on these matching number of times executed expectation
+            embedded in this predicate.
+        :param result_predicate: An arity 1 predicate to match against the recorded result of a function call.
+        :param args: The predicate positional arguments to match up against the call arguments, to check and verify
+            against. These should all be arity 1 and return True/False.
+        :param kwargs: The predicate keyword arguments to match up against the call arguments, to check and verify
+            against. These should all be arity 1 and return True/False.
+        :return: None
+        :raises: AssertionError on failure to match.
+        """
+        result = self.check_quantified_partial_plus_result_match(times_predicate, result_predicate, *args, **kwargs)
+        if not result and not self.verbose:
+            raise AssertionError("Failed to find a matching result!")
+        elif not result:
+            raise AssertionError(
+                "Failed to find a matching result!\n"
+                "All invocation results:\n[{}]".format(",\n".join(map(_max_length_repr, self.successful_results)))
+            )
+
+    def assert_quantified_exact_plus_result_match(self, times_predicate, result_predicate, *args, **kwargs):
+        """
+        Assert over the spied results of all of the callable invocations, see if any match satisfies the number of
+        times predicate, the result predicate and the given exact invocation args/kwargs predicates.
+
+        :param times_predicate: An arity 2 predicate that takes the successful invocation list, and the total
+            invocation list, returns true or false based on these matching number of times executed expectation
+            embedded in this predicate.
+        :param result_predicate: An arity 1 predicate to match against the recorded result of a function call.
+        :param args: The predicate positional arguments to match up against the call arguments, to check and verify
+            against. These should all be arity 1 and return True/False.
+        :param kwargs: The predicate keyword arguments to match up against the call arguments, to check and verify
+            against. These should all be arity 1 and return True/False.
+        :return: None
+        :raises: AssertionError on failure to match.
+        """
+
+        result = self.check_quantified_exact_plus_result_match(times_predicate, result_predicate, *args, **kwargs)
+        if not result and not self.verbose:
+            raise AssertionError("Failed to find a matching result!")
+        elif not result:
+            raise AssertionError(
+                "Failed to find a matching result!\n"
+                "All invocation results:\n[{}]".format(",\n".join(map(_max_length_repr, self.successful_results)))
             )
 
     def assert_any_exact_match(self, *args, **kwargs):
+        """
+        Wraps assert_quantified_exact_match, seeing if the specified arguments show up at least once.
+
+        :param args: The arguments to attempt to match on.
+        :param kwargs: The keyword arguments to match on.
+        :return: None
+        :raises: AssertionError on failure to match.
+        """
         self.assert_quantified_exact_match(at_least_once, *args, **kwargs)
 
     def assert_one_exact_match(self, *args, **kwargs):
+        """
+        Wraps assert_quantified_exact_match, seeing if the specified arguments show up exactly once.
+
+        :param args: The arguments to attempt to match on.
+        :param kwargs: The keyword arguments to match on.
+        :return: None
+        :raises: AssertionError on failure to match.
+        """
         self.assert_quantified_exact_match(once, *args, **kwargs)
 
     def assert_all_exact_match(self, *args, **kwargs):
+        """
+        Wraps assert_quantified_exact_match, seeing if the specified arguments always appear.
+
+        :param args: The arguments to attempt to match on.
+        :param kwargs: The keyword arguments to match on.
+        :return: None
+        :raises: AssertionError on failure to match.
+        """
         self.assert_quantified_exact_match(always, *args, **kwargs)
 
     def assert_any_partial_match(self, *args, **kwargs):
+        """
+        Wraps assert_quantified_partial_match, seeing if the specified arguments show up at least once.
+
+        :param args: The arguments to attempt to match on.
+        :param kwargs: The keyword arguments to match on.
+        :return: None
+        :raises: AssertionError on failure to match.
+        """
         self.assert_quantified_partial_match(at_least_once, *args, **kwargs)
 
     def assert_one_partial_match(self, *args, **kwargs):
+        """
+        Wraps assert_quantified_partial_match, seeing if the specified arguments show up exactly once.
+
+        :param args: The arguments to attempt to match on.
+        :param kwargs: The keyword arguments to match on.
+        :return: None
+        :raises: AssertionError on failure to match.
+        """
         self.assert_quantified_partial_match(once, *args, **kwargs)
 
     def assert_all_partial_match(self, *args, **kwargs):
+        """
+        Wraps assert_quantified_partial_match, seeing if the specified arguments always show up.
+
+        :param args: The arguments to attempt to match on.
+        :param kwargs: The keyword arguments to match on.
+        :return: None
+        :raises: AssertionError on failure to match.
+        """
         self.assert_quantified_partial_match(always, *args, **kwargs)
 
     def assert_any_result_match(self, result_predicate):
+        """
+        Wraps assert_quantified_partial_match, seeing if the result predicate returns true at least once.
+
+        :param result_predicate: The function to match against stored results.
+        :return: None
+        :raises: AssertionError on failure to match.
+        """
         self.assert_quantified_result_match(at_least_once, result_predicate)
 
     def assert_one_result_match(self, result_predicate):
+        """
+        Wraps assert_quantified_partial_match, seeing if the result predicate is true exactly once.
+
+        :param result_predicate: The function to match against stored results.
+        :return: None
+        :raises: AssertionError on failure to match.
+        """
         self.assert_quantified_result_match(once, result_predicate)
 
-    def assert_all_result_match(self, *args, **kwargs):
-        self.assert_quantified_result_match(always, *args, **kwargs)
+    def assert_all_result_match(self, result_predicate):
+        """
+        Wraps assert_quantified_partial_match, seeing if the result predicate is always true.
 
-    def reset_invocations(self):
+        :param result_predicate: The function to match against stored results.
+        :return: None
+        :raises: AssertionError on failure to match.
+        """
+        self.assert_quantified_result_match(always, result_predicate)
+
+    def reset(self):
+        """
+        Clear all of the recorded invocations to return to an "uninvoked" state.
+
+        :return: True
+        """
         self.successful_invocations = []
-        return True
-
-    def reset_results(self):
         self.successful_results = []
         return True
 
@@ -297,6 +524,7 @@ def times(num_times):
     def predicate(matching_invocations, _):
         return len(matching_invocations) == num_times
     return predicate
+
 
 once = times(1)
 never = times(0)
