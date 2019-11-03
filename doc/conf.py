@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 project = 'Test Toolbox'
 copyright = '2019, Robert Cope'
 author = 'Robert Cope'
+master_doc = 'index'
 
 # The full version, including alpha/beta/rc tags
 release = '0.1.0'
