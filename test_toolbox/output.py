@@ -92,9 +92,9 @@ blinking = partial(_output_formatter, ANSITermCodes.BLINK, terminator_code=ANSIT
 
 def _print_formatter(color_str, *args):
     if args:
-         args = ("{0}{1}".format(color_str, args[0]),) + args
+        args = ("{0}{1}".format(color_str, args[0]),) + args[1:]
     else:
-        args = (color_str,) + args
+        args = (color_str,)
     args = args + (ANSITermCodes.RESET,)
     if IS_PY2:
         print(*map(unicode, args))

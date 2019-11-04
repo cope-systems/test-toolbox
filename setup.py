@@ -16,10 +16,10 @@ DEV_REQUIREMENTS = [l for l in read_file('dev-requirements.txt').split('\n')
 
 setup(
     name="TestToolbox",
-    version="0.1.0",
+    version="0.1.1",
     url='https://github.com/cope-systems/test_toolbox',
     description='Tools and extensions for testing in Python.',
-    long_description=read_file("README.md"),
+    long_description=None,
     author='Robert Cope',
     author_email='robert@copesystems.com',
     license='BSD',

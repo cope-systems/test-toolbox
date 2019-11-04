@@ -25,15 +25,23 @@ from test_toolbox.output import (
 class OutputModuleUnitTests(TestCase):
     
     TEST_STRING = u"foobar"
+
+    @staticmethod
+    def assert_only_one_match(string, *substrings):
+        for substring in substrings:
+            assert string.count(substring) == 1, \
+                "Occurance of {0} in {1} is not singular".format(substring, string)
     
     def test_output_functions(self):
         def assert_color_str(color_output_func, expected_color):
-            assert_that(color_output_func(self.TEST_STRING)).contains(
+            self.assert_only_one_match(
+                color_output_func(self.TEST_STRING),
                 self.TEST_STRING, expected_color, ANSITermCodes.NORMAL_COLOR
             )
             
         def assert_effect_str(effect_func, expected_ansi_code, expected_terminator):
-            assert_that(effect_func(self.TEST_STRING)).contains(
+            self.assert_only_one_match(
+                effect_func(self.TEST_STRING),
                 self.TEST_STRING, expected_ansi_code, expected_terminator
             )
 
@@ -62,11 +70,13 @@ class OutputModuleUnitTests(TestCase):
         old_stdout = sys.stdout
         
         def assert_effect(print_func, expected_ansi_code):
+            sys.stdout = io.StringIO()
             print_func(self.TEST_STRING)
-            assert_that(fake_stdout.getvalue()).contains(
-                self.TEST_STRING, expected_ansi_code, ANSITermCodes.RESET
+            self.assert_only_one_match(
+                 sys.stdout.getvalue(),
+                 self.TEST_STRING, expected_ansi_code, ANSITermCodes.RESET
             )
-
+        
         try:
             sys.stdout = fake_stdout
 
